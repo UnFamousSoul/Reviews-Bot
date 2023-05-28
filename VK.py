@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
 
-from time import sleep
 import requests
-from Broadcast import Shout, Color
+import time
 from bs4 import BeautifulSoup
 
-default = Shout()
+from Broadcast import Shout, Color
 
 
 class VK:
 
-    @default.announcement
-    def __init__(self, token=None, group=None, api_version=5.101, waiting_time=10) -> None:
+    def __init__(self, token=None, group=None, api_version=5.101, waiting_time=10):
         self.token = token
         self.group = group
         self.API_version = api_version
@@ -19,66 +17,56 @@ class VK:
 
         self.session = requests.Session()
 
-        self.url = "https://21.ru"
-        self.key = 0
-        self.ts = 0
+        self.url = "https://21.ru" if group else None
+        self.key = 0 if group else None
+        self.ts = 0 if group else None
 
         self.user_url = "https://21.ru"
         self.user_key = 0
         self.user_ts = 0
 
         if group:
-            self.getConnection()
+            self.get_long_poll_server()
         else:
-            self.user_Connection()
+            self.get_user_long_poll_server()
 
-    @default.announcement
-    def method(self, method, values=None):
-
+    def method(self, method_name, values=None):
         values = values.copy() if values else {}
 
-        if 'v' not in values:
-            values['v'] = self.API_version
+        values.setdefault('v', self.API_version)
 
         if self.token:
             values['access_token'] = self.token
 
         response = None
-        i = 0
-        while not response:
+
+        for i in range(11):
             try:
                 response = self.session.post(
-                    'https://api.vk.com/method/' + method,
-                    values,
+                    f'https://api.vk.com/method/{method_name}', json=values
                 )
-            except Exception as e:
-                print(Color.bold + "[CUSTOM] " + Color.red + Color.bold + str(e) + Color.default)
-                sleep(5)
-            i += 1
-            if i > 10:
-                response = {'error': {'error_code': "CUSTOM", 'error_msg': "Достигнут предел попыток."}}
+            except requests.exceptions.RequestException as e:
+                print(f"[CUSTOM] {Color.red}[{i}] {e}{Color.default}")
+                time.sleep(5)
+                continue
+            break
 
         if response.ok:
             response = response.json()
 
-        try:
+        if 'response' in response:
             return response['response']
-        except Exception:
-            try:
-                code = response['error']['error_code']
-                if code != 10:
-                    print(Color.bold + "[" + str(code) + "] " + Color.red + Color.bold + str(
-                        response['error']['error_msg']) + Color.default)
-                    print(values)
-                else:
-                    sleep(5)
-                return response
-            except Exception:
-                return {"error": 1}
 
-    @default.announcement
-    def getConnection(self, update=True):
+        if 'error' in response:
+            error_code = response['error']['error_code']
+            if error_code != 10:
+                print(
+                    f"{Color.bold}[{error_code}] {Color.red}{response['error']['error_msg']}{Color.default}")
+                print(values)
 
+        return response
+
+    def get_long_poll_server(self, update=True):
         response = self.method('groups.getLongPollServer', {'group_id': self.group})
 
         if "error" not in response:
@@ -88,9 +76,7 @@ class VK:
             if update:
                 self.ts = response['ts']
 
-    @default.announcement
-    def user_Connection(self, update=True):
-
+    def get_user_long_poll_server(self, update=True):
         response = self.method('messages.getLongPollServer')
 
         if "error" not in response:
@@ -100,8 +86,9 @@ class VK:
             if update:
                 self.user_ts = response['ts']
 
-    @default.announcement
-    def getEvent(self):
+    def get_event(self):
+        if not self.group:
+            return []
 
         values = {
             'act': 'a_check',
@@ -109,6 +96,7 @@ class VK:
             'ts': self.ts,
             'wait': self.waiting_time,
         }
+
         response = {'failed': 3}
 
         try:
@@ -117,27 +105,25 @@ class VK:
                 params=values,
                 timeout=self.waiting_time + 10
             ).json()
-        except Exception as e:
-            print(e)
+        except requests.exceptions.RequestException as e:
+            print(f"[CUSTOM] {Color.red}{e}{Color.default}")
 
         if 'failed' not in response:
             self.ts = response['ts']
-
             return response['updates']
 
         elif response['failed'] == 1:
             self.ts = response['ts']
 
         elif response['failed'] == 2:
-            self.getConnection(update=False)
+            self.get_long_poll_server(update=False)
 
         elif response['failed'] == 3:
-            self.getConnection()
+            self.get_long_poll_server()
 
         return []
 
-    @default.announcement
-    def getBot(self):
+    def get_bot(self):
         values = {
             'act': 'a_check',
             'key': self.user_key,
@@ -164,45 +150,45 @@ class VK:
             self.user_ts = response['ts']
 
         elif response['failed'] == 2:
-            self.user_Connection(update=False)
+            self.get_user_long_poll_server(update=False)
 
         elif response['failed'] == 3:
-            self.user_Connection()
+            self.get_user_long_poll_server()
 
         return []
 
-    @default.announcement
     def download_photo(self, img_link, destination):
         p = requests.get(img_link)
         with open(destination, "wb") as out:
             out.write(p.content)
-            out.close()
 
-    @default.announcement
     def upload_photo(self, url, params):
         r = requests.post(url, files=params)
         r = r.json()
-        photo = r.get('photo') or r.get('photos_list')
-        params = {'server': r['server'], 'photo': photo, 'photos_list': photo, 'hash': r['hash']}
-        return params
+        photo = r.get('photo') or r.get('photos_list') or None
+        if not photo:
+            return None
 
-    @default.announcement
+        return {'server': r['server'], 'photo': photo, 'hash': r['hash']}
+
     def get_page(self, url):
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
                           'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36'}
         page = self.session.get(url, headers=headers)
-        i = 0
-        while page.status_code != 200 and i < 10:
+
+        for i in range(10):
+            if page.status_code == 200:
+                break
             page = self.session.get(url, headers=headers)
-            i += 1
-        if page.status_code == 200:
-            return BeautifulSoup(page.text, "html.parser")
-        return []
+
+        if page.status_code != 200:
+            return []
+
+        return BeautifulSoup(page.text, "html.parser")
 
 
 if __name__ == "__main__":
-
     obj = VK()
     while True:
-        obj.getEvent()
+        obj.get_event()
