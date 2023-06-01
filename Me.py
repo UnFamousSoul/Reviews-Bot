@@ -4,6 +4,8 @@ from datetime import datetime
 from random import randint
 from threading import Thread
 from time import sleep, time
+from typing import List, Dict
+
 import pyautogui
 
 from selenium import webdriver
@@ -16,58 +18,55 @@ from VK import VK
 from Database import DB
 from Broadcast import Color, Shout
 
-data = DB()
-default = Shout()
-
 
 class Instrument:
-
-    def __init__(self) -> None:
-        self.vk = VK(data.token)
+    def __init__(self):
+        self.vk = VK(DB().token)
         self.secret = [
             VK("Второй аккаунт"),
             VK("Третий аккаунт"),
             VK("Четвёртый аккаунт"),
             VK("Мой токен"),
-            self.vk
+            self.vk,
         ]
         self.index = 0
 
-    @default.announcement
+    @Shout.announcement
     def plus_secret(self):
         self.index += 1
         if self.index >= len(self.secret):
             self.index = 0
 
-    @default.announcement
-    def announce(self, user=None, post_id=None, text=None, key="comment"):
+    @Shout.announcement
+    def announce(self, user: int = None, post_id: int = None, text: str = None, key: str = "comment"):
         date = datetime.now().strftime("%d.%m %H:%M:%S")
-        user_info = self.vk.method('users.get', {'user_ids': user})[0]
-        first_name = user_info.get('first_name')
-        last_name = user_info.get('last_name')
+        user_info = self.vk.method("users.get", {"user_ids": user})[0]
+        first_name = user_info.get("first_name")
+        last_name = user_info.get("last_name")
         if key == "comment":
             print(
                 f"{Color.blue}{date} {Color.default}{Color.bold}{post_id} ({user}) "
-                f"{first_name} {last_name}:{Color.blue} {text}{Color.default}")
+                f"{first_name} {last_name}:{Color.blue} {text}{Color.default}"
+            )
         if key == "approved":
             print(
                 f"{Color.blue}{date} {Color.default}{Color.bold}({user}) "
-                f"{first_name} {last_name}:{Color.blue} Добавлен в сообщество.{Color.default}")
+                f"{first_name} {last_name}:{Color.blue} Добавлен в сообщество.{Color.default}"
+            )
 
-    @default.announcement
-    def func(self, array, text):
-
+    @Shout.announcement
+    def func(self, array: List[str], text: str) -> bool:
         for i in range(len(array)):
             if array[i] in text:
                 return True
         return False
 
-    @default.announcement
-    def time_transfer(self, seconds):
-        days = int(seconds / 86400)
-        hours = int(seconds / 3600) - 24 * days
-        minutes = int(seconds / 60) - 60 * hours - 60 * 24 * days
-        seconds = seconds - 60 * minutes - 60 * 60 * hours - 60 * 60 * 24 * days
+    @Shout.announcement
+    def time_transfer(self, seconds: int) -> str:
+        days = seconds // 86400
+        hours = (seconds // 3600) - (24 * days)
+        minutes = (seconds // 60) - (60 * hours) - (60 * 24 * days)
+        seconds = seconds - (60 * minutes) - (60 * 60 * hours) - (60 * 60 * 24 * days)
 
         reply = ""
         if days > 0:
@@ -81,40 +80,45 @@ class Instrument:
 
         return reply
 
-    @default.announcement
-    def base_fix(self, text):
+    @Shout.announcement
+    def base_fix(self, text: str) -> str:
         response = ""
         for i in range(len(text)):
             symbol = text[i]
-            if symbol == "\"":
-                symbol = "\"\""
+            if symbol == '"':
+                symbol = '""'
             if symbol == "'":
                 symbol = "''"
             response += symbol
         return response
 
-    @default.announcement
-    def shorter(self, text):
-        short_text = text[:30]
+    @Shout.announcement
+    def shorter(self, text: str) -> str:
         if len(text) > 30:
-            short_text += "..."
-        return short_text
+            return text[:30] + "..."
+        return text
 
-    @default.announcement
-    def message(self, peer_id, text=None, attachment=None, group=None):
+    @Shout.announcement
+    def message(
+        self, peer_id: int, text: str = None, attachment: str = None, group: int = None
+    ) -> None:
         print(
-            f"{Color.bold}[*] {Color.light_blue}{Color.bold} Отправлено сообщение {Color.default}\"{text}\""
-            f" с вложением \"{attachment}\"{Color.blue}{Color.bold} ({peer_id}) {Color.default}")
-        self.vk.method('messages.send', {
-            'peer_id': peer_id,
-            'message': text,
-            'random_id': randint(0, 100000),
-            'attachment': attachment,
-            'group_id': group
-        })
+            f'{Color.bold}[*] {Color.light_blue}{Color.bold} Отправлено сообщение {Color.default}"{text}"'
+            f' с вложением "{attachment}"{Color.blue}{Color.bold} ({peer_id}) {Color.default}'
+        )
+        self.vk.method(
+            "messages.send",
+            {
+                "peer_id": peer_id,
+                "message": text,
+                "random_id": randint(0, 100000),
+                "attachment": attachment,
+                "group_id": group,
+            },
+        )
 
-    @default.announcement
-    def choosing(self, sizes_array):
+    @Shout.announcement
+    def choosing(self, sizes_array: List[Dict]) -> str:
         max_height = 0
         response = {"url": "0"}
         for i in range(len(sizes_array)):
@@ -124,50 +128,57 @@ class Instrument:
                 response = body
         return response["url"]
 
-    @default.announcement
-    def save_photos(self, attachments, post_id):
+    @Shout.announcement
+    def save_photos(self, attachments: List[Dict], post_id: int) -> None:
         for i in range(len(attachments)):
-            data.check_dir(f"{data.directory}databases/reviews/{post_id}")
+            DB().check_dir(f"{DB().directory}databases/reviews/{post_id}")
             attachment_type = attachments[i]["type"]
             print(attachments[i][attachment_type])
             attachment_body = attachments[i][attachment_type]["sizes"]
             url = self.choosing(attachment_body)
             if url != "0":
-                ins.vk.download_photo(
+                self.vk.download_photo(
                     url,
-                    f"{data.directory}databases/reviews/{post_id}/{i + 1}.jpg"
+                    f"{DB().directory}databases/reviews/{post_id}/{i + 1}.jpg",
                 )
 
-    @default.announcement
-    def upload_photo(self, target, number, method_upload="photos.getMessagesUploadServer", param="peer_id",
-                     method_save="photos.saveMessagesPhoto"):
-
-        directory = f"{data.directory}databases\\reviews\\{number}"
+    @Shout.announcement
+    def upload_photo(
+        self,
+        target: int,
+        number: int,
+        method_upload: str = "photos.getMessagesUploadServer",
+        param: str = "peer_id",
+        method_save: str = "photos.saveMessagesPhoto",
+    ) -> str:
+        directory = f"{DB().directory}databases\\reviews\\{number}"
         attachments = ""
 
-        vk_info = ins.vk.method(method_upload, {param: target})
-        data_response = data.check_photos(directory)
+        vk_info = self.vk.method(method_upload, {param: target})
+        data_response = DB().check_photos(directory)
         for i in range(data_response):
-            vk_response = ins.vk.upload_photo(vk_info["upload_url"], {"photo": open(f"{directory}\\{i + 1}.jpg", "rb")})
+            vk_response = self.vk.upload_photo(
+                vk_info["upload_url"],
+                {"photo": open(f"{directory}\\{i + 1}.jpg", "rb")},
+            )
 
-            photo = ins.vk.method(method_save, vk_response)[0]
+            photo = self.vk.method(method_save, vk_response)[0]
             photo_owner = photo["owner_id"]
             photo_id = photo["id"]
             attachments += f"photo{photo_owner}_{photo_id},"
         return attachments.removesuffix(",")
 
-    @default.announcement
-    def delete_quote(self, text):
+    @Shout.announcement
+    def delete_quote(self, text: str) -> str:
         response = ""
         for i in range(len(text)):
-            if text[i] not in ["\"", "'"]:
+            if text[i] not in ['"', "'"]:
                 response += text[i]
         return response
 
-    @default.announcement
-    def black_list(self, text):
-
-        data_response = data.get_all(f"SELECT * FROM blacklisted")
+    @Shout.announcement
+    def black_list(self, text: str) -> bool:
+        data_response = DB().get_all(f"SELECT * FROM blacklisted")
 
         for i in range(len(data_response)):
             if data_response[i][0] in text:
@@ -175,12 +186,8 @@ class Instrument:
         return False
 
 
-ins = Instrument()
-
-
 class Install(Thread):
-
-    def __init__(self, user, url) -> None:
+    def __init__(self, user: int, url: str) -> None:
         Thread.__init__(self)
         self.width, self.height = (None, None)
         self.driver = None
@@ -188,22 +195,26 @@ class Install(Thread):
 
         self.user = user
         self.url = str(url)
-        self.destination = f"{data.directory}databases\\temp\\"
+        self.destination = f"{DB().directory}databases\\temp\\"
 
-    @default.announcement
+    @Shout.announcement
     def run_driver(self):
         self.width, self.height = pyautogui.size()
         options = webdriver.ChromeOptions()
-        options.add_experimental_option('prefs', {
-            "select_file_dialogs.allowed": False,
-            "profile.default_content_setting_values.automatic_downloads": 1,
-            "download_restrictions": 0,
-            "savefile.default_directory": f"{self.destination}",
-            "directory_upgrade": True,
-            "download.prompt_for_download": False})
-        options.add_argument('--disable-gpu')
-        options.add_argument('--no-sandbox')
-        options.add_extension(f"{data.directory}\\vpn.crx")
+        options.add_experimental_option(
+            "prefs",
+            {
+                "select_file_dialogs.allowed": False,
+                "profile.default_content_setting_values.automatic_downloads": 1,
+                "download_restrictions": 0,
+                "savefile.default_directory": f"{self.destination}",
+                "directory_upgrade": True,
+                "download.prompt_for_download": False,
+            },
+        )
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_extension(f"{DB().directory}\\vpn.crx")
         self.driver = Chrome(options=options)
         self.timeout = 2
 
